@@ -28,7 +28,7 @@ def get_experiment_list(experiment_id: int):
 def get_experiment_str(limit: int = 10, status: str = "running"):
     return {"limit": limit, "status": status}
 
-@app.post("/experiment")
+@app.post("/experiment/")
 def create_experiment(experiment: ExperimentCreate):
     return {
         "message": "Created",
