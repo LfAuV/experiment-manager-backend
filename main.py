@@ -1,30 +1,18 @@
-from fastapi import FastAPI, Depends, status, HTTPException
-from routers import users, experiments
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from routers import experiment
+from db import create_db_and_tables
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    yield
+# 还是不理解async和yield的具体用法
 
-app.include_router(users.router)
-app.include_router(experiments.router)
+app = FastAPI(lifespan=lifespan)
 
-fake_users = {
-    "alice": {"username": "alice", "password": "123456"},
-    "bob": {"username": "bob", "password": "abcdef"}
-}
+app.include_router(experiment.router)
 
-@app.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = fake_users.get(form_data.username)
-
-    if not user or user["password"] != form_data.password:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password"
-        )
-    
-    access_token = f"token-{form_data.username}"
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+@app.get("/")
+def root():
+    return {"message": "Backend is running"}
