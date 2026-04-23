@@ -1,79 +1,96 @@
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
-from typing import Optional
-"""
-Run Indictate:
-uvicorn main:app --reload
-"""
+from fastapi import APIRouter, HTTPException, status, Depends
+from sqlmodel import Session, select
+from typing import List
+from db import get_session
+from schemas import UserCreate, UserUpdate, UserRead
+from models import User
+from security import hash_password
+
 router = APIRouter(prefix="/users", tags=["users"])
 
-fake_db = {
-    1: {"name": "Tom", "age": 20, "status": "active", "password": "002"},
-    2: {"name": "Jerry", "age": 22, "status": "inactive", "password": "001"}
-}
-
-class UserCreate(BaseModel):
-    name: str
-    age: int
-    status: str
+@router.get("/", response_model=List[UserRead])
+def get_users(session: Session = Depends(get_session)):
+    users = session.exec(select(User)).all()
+    return users
 
 
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    age: Optional[int] = None
-    status: Optional[str] = None
-
-
-class UserOut(BaseModel):
-    name: str
-    age: int
-    status: str
-
-@router.get("/{user_id}", response_model=UserOut)
-def get_user(user_id: int):
-    if user_id not in fake_db:
+@router.get("/{user_id}", response_model=UserRead)
+def get_user(user_id: int, session: Session = Depends(get_session)):
+    user = session.get(User, user_id)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User Not Found"
         )
-    return fake_db[user_id]
+    return user
 
-@router.post("/", response_model = UserOut,status_code = status.HTTP_201_CREATED)
-def create_user(user: UserCreate):
-    new_id = max(fake_db.keys())+1
-    fake_db[new_id] = user.model_dump()
-    return fake_db[new_id]
+@router.post("/", response_model = UserRead,status_code = status.HTTP_201_CREATED)
+def create_user(data: UserCreate, session: Session = Depends(get_session)):
+    user = User(
+        username=data.username,
+        hashed_password=hash_password(data.password)
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
 
-@router.put("/{user_id}", response_model=UserOut)
-def update_user_put(user_id: int, user: UserCreate):
-    if user_id not in fake_db:
+@router.put("/{user_id}", response_model=UserRead)
+def update_user_put(
+    user_id: int, 
+    data: UserCreate,
+    session: Session = Depends(get_session)):
+    user = session.get(User, user_id)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User Not Found"
         )
-    fake_db[user_id] = user.model_dump()
-    return fake_db[user_id]
+    user.username = data.username
+    user.hashed_password = hash_password(data.password)
 
-@router.patch("{user_id}", response_model=UserOut)
-def update_user_patch(user_id: int, user:UserUpdate):
-    if user_id not in fake_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User Not Found"
-        )
-    stored_user = fake_db[user_id]
-    update_data = user.model_dump(exclude_unset=True)
-    stored_user.update(update_data)
-    fake_db[user_id] = stored_user
-    return fake_db[user_id]
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
 
-@router.delete("/{user_id}", response_model=UserOut)
-def delete_user(user_id: int):
-    if user_id not in fake_db:
+@router.patch("/{user_id}", response_model=UserRead)
+def update_user_patch(
+    user_id: int, 
+    data: UserUpdate,
+    session: Session = Depends(get_session)
+    ):
+    user = session.get(User, user_id)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User Not Found"
         )
     
-    deleted_user = fake_db.pop(user_id)
-    return deleted_user
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "password" in update_data:
+        user.hashed_password = hash_password(update_data.pop("password"))
+
+    for key, value in update_data.items():
+        setattr(user, key, value)
+    
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+@router.delete("/{user_id}", response_model=UserRead)
+def delete_user(
+    user_id: int,
+    session: Session = Depends(get_session)
+    ):
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User Not Found"
+        )
+    session.delete(user)
+    session.commit()
+    return user

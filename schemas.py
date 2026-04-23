@@ -17,3 +17,18 @@ class ExperimentRead(SQLModel):
     experiment: str
     time: int
     status: str
+
+
+class UserCreate(SQLModel):
+    username: str
+    password: str
+
+class UserUpdate(SQLModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class UserRead(SQLModel):
+    id: int
+    username: str
+    is_active: bool

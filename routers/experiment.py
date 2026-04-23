@@ -3,7 +3,8 @@ from sqlmodel import Session, select
 from typing import List
 from db import get_session
 from schemas import ExperimentCreate, ExperimentRead, ExperimentUpdate
-from models import Experiment
+from models import Experiment, User
+from security import get_current_user
 
 
 router = APIRouter(
@@ -13,7 +14,10 @@ router = APIRouter(
 
 
 @router.get("/", response_model=List[ExperimentRead])
-def list_experiments(session: Session = Depends(get_session)):
+def list_experiments(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+    ):
     experiments = session.exec(select(Experiment)).all()
     return experiments
 
